@@ -135,6 +135,24 @@ def load_config() -> tuple[dict[str, Any], Path]:
     return data, path
 
 
+def save_profile(profile: str) -> Path:
+    """Save ``profile`` as the one to use: ``config.json`` holds only ``"profile"``.
+
+    The ``cortex-training`` folder is created inside the Snowflake folder if it's
+    missing, readable only by the user, like the profile file next to it.
+    """
+    _, path = load_config()  # A file that can't be read back is an error, not overwritten.
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp_path.write_text(json.dumps({"profile": profile}, indent=2) + "\n", encoding="utf-8")
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    return path
+
+
 def snowflake_profiles() -> tuple[str, str, Mapping[str, Mapping[str, Any]]]:
     """Return the default profile name, where that name comes from, and every profile.
 
