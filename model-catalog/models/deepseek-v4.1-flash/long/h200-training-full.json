@@ -3,7 +3,7 @@
   "sub_job_configs": [
     {
       "job_type": "training",
-      "model_name": "PrimeIntellect/DeepSeek-V4.1-Flash-bf16",
+      "model_name": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
       "dtype": "bfloat16",
       "seed": 42,
       "training_config": {

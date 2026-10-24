@@ -1,8 +1,8 @@
 {
-  "modelId": "PrimeIntellect/DeepSeek-V4.1-Flash-bf16",
+  "modelId": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
   "license": {
     "name": "MIT",
-    "url": "https://huggingface.co/PrimeIntellect/DeepSeek-V4.1-Flash-bf16/blob/main/LICENSE"
+    "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/blob/main/LICENSE"
   },
   "architecture": "moe",
   "moe": {

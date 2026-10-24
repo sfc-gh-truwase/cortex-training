@@ -249,32 +249,32 @@ def test_moe_sft_recipes_have_runnable_parallelism():
             16,
             1,
         ),
-        "deepseek-v4.1-flash-bf16/standard/h200-training-full.json": (
-            "PrimeIntellect/DeepSeek-V4.1-Flash-bf16",
+        "deepseek-v4.1-flash/standard/h200-training-full.json": (
+            "deepseek-ai/DeepSeek-V4.1-Flash-1017",
             32,
             32,
             65536,
             8,
             4,
         ),
-        "deepseek-v4.1-flash-bf16/standard/h200-training-lora.json": (
-            "PrimeIntellect/DeepSeek-V4.1-Flash-bf16",
-            32,
-            32,
+        "deepseek-v4.1-flash/standard/h200-training-lora.json": (
+            "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+            16,
+            16,
             65536,
-            8,
-            4,
+            16,
+            1,
         ),
-        "deepseek-v4.1-flash-bf16/long/h200-training-full.json": (
-            "PrimeIntellect/DeepSeek-V4.1-Flash-bf16",
+        "deepseek-v4.1-flash/long/h200-training-full.json": (
+            "deepseek-ai/DeepSeek-V4.1-Flash-1017",
             32,
             32,
             262144,
             32,
             1,
         ),
-        "deepseek-v4.1-flash-bf16/long/h200-training-lora.json": (
-            "PrimeIntellect/DeepSeek-V4.1-Flash-bf16",
+        "deepseek-v4.1-flash/long/h200-training-lora.json": (
+            "deepseek-ai/DeepSeek-V4.1-Flash-1017",
             32,
             32,
             262144,
@@ -359,7 +359,7 @@ def test_moe_sft_recipes_have_runnable_parallelism():
                 assert "offload_optimizer" not in ds_config["zero_optimization"]
             else:
                 assert ds_config["zero_optimization"]["offload_optimizer"]["device"] == "cpu"
-        elif filename.startswith("deepseek-v4.1-flash-bf16/"):
+        elif filename.startswith("deepseek-v4.1-flash/"):
             assert training["attn_implementation"] == "eager"
             assert "offload_config" not in training["ac_config"]
             assert training["prime_rl"] == {
@@ -380,7 +380,7 @@ def test_moe_sft_recipes_have_runnable_parallelism():
             else:
                 assert training["optimizer"]["lr"] == 2e-5
                 assert "peft_config" not in training
-            if filename == "deepseek-v4.1-flash-bf16/standard/h200-training-lora.json":
+            if filename == "deepseek-v4.1-flash/standard/h200-training-lora.json":
                 assert "offload_optimizer" not in ds_config["zero_optimization"]
             else:
                 assert ds_config["zero_optimization"]["offload_optimizer"]["device"] == "cpu"
@@ -391,7 +391,7 @@ def test_moe_sft_recipes_have_runnable_parallelism():
             assert training["tiled_mlp_token_chunk_size"] == 1024
             assert training["ds_config"]["bf16"]["bf16_optimizer_states"] is True
             assert training["ds_config"]["bf16"]["bf16_master_weights_and_grads"] is True
-        elif not filename.startswith(("deepseek-v4-flash/", "deepseek-v4.1-flash-bf16/")):
+        elif not filename.startswith(("deepseek-v4-flash/", "deepseek-v4.1-flash/")):
             assert "prime_rl" not in training
         assert training["max_seq_len"] == seq_len
         assert training["n_gpus"] == n_gpus
