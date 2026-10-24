@@ -218,7 +218,7 @@ def test_moe_sft_recipes_have_runnable_parallelism():
             1,
         ),
         "deepseek-v4-flash/standard/h200-training-full.json": (
-            "PrimeIntellect/DeepSeek-V4-Flash-0731-bf16",
+            "deepseek-ai/DeepSeek-V4-Flash-0731",
             16,
             16,
             65536,
@@ -242,7 +242,7 @@ def test_moe_sft_recipes_have_runnable_parallelism():
             1,
         ),
         "deepseek-v4-flash/long/h200-training-full.json": (
-            "PrimeIntellect/DeepSeek-V4-Flash-0731-bf16",
+            "deepseek-ai/DeepSeek-V4-Flash-0731",
             16,
             16,
             262144,
@@ -524,12 +524,7 @@ def test_moe_rl_recipes_have_runnable_parallelism():
         assert sampling_config["vllm_config"]["tensor_parallel_size"] == expected_tp
         assert "trust_remote_code" not in sampling_config["vllm_config"]
         assert training["job_type"] == "training"
-        expected_training_model = (
-            "PrimeIntellect/DeepSeek-V4-Flash-0731-bf16"
-            if filename == "deepseek-v4-flash/long/h200-training-full.json"
-            else model_id
-        )
-        assert training["model_name"] == expected_training_model
+        assert training["model_name"] == model_id
         assert training["dtype"] == "bfloat16"
         assert training_config["model_provider"] == "prime_rl"
         if filename == "glm-5.3-flash/long/h200-training-lora.json":
