@@ -379,7 +379,7 @@ anything. Your choice is saved in ~/.snowflake/cortex-training/config.json.
 examples:
   cortex-training login            # set up, or check your current setup
   cortex-training login training   # use the profile "training", or create it
-  cortex-training login --convert-old-config ~/ct-config.json
+  cortex-training login --convert-legacy-config ~/ct-config.json
                                    # turn an old JSON config into a profile
 """
 
@@ -846,8 +846,8 @@ def build_parser(
     # The old forms, `login config.json` and `login --config config.json`, are
     # still parsed so they can explain what replaced them.
     login.add_argument(
-        "--convert-old-config",
-        dest="convert_old_config",
+        "--convert-legacy-config",
+        dest="convert_legacy_config",
         metavar="PATH",
         help=(
             "Turn an old JSON config (host, PAT, database) into a Snowflake connection profile, "
@@ -1310,13 +1310,13 @@ def _cmd_list(args: argparse.Namespace, client, stdout: TextIO) -> int:
 
 def _cmd_login(args: argparse.Namespace, stdin: TextIO, stdout: TextIO, stderr: TextIO) -> int:
     name = args.login_name
-    if args.convert_old_config is not None:
+    if args.convert_legacy_config is not None:
         if name is not None:
-            stderr.write("error: `login --convert-old-config PATH` takes no profile name; it asks for one.\n")
+            stderr.write("error: `login --convert-legacy-config PATH` takes no profile name; it asks for one.\n")
             return 2
         from cortex_training._convert import run_convert
 
-        return run_convert(args.convert_old_config, stdin=stdin, stdout=stdout, stderr=stderr)
+        return run_convert(args.convert_legacy_config, stdin=stdin, stdout=stdout, stderr=stderr)
     old_form = args.login_config_option or (name is not None and ("." in name or "/" in name))
     if old_form:
         typed = f"--config {args.login_config_option}" if args.login_config_option else name

@@ -341,7 +341,7 @@ Explicit CLI flags override config values.
 To turn a JSON config into a Snowflake connection profile instead:
 
 ```bash
-cortex-training login --convert-old-config PATH
+cortex-training login --convert-legacy-config PATH
 ```
 
 It reads the file's `host`, `pat`, `database`, and `schema` (also inside a

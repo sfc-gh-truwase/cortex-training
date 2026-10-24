@@ -439,6 +439,6 @@ def test_it_needs_a_terminal(old_file):
 
 def test_the_flag_takes_no_profile_name():
     stderr = io.StringIO()
-    code = _cli.main(["login", "train", "--convert-old-config", "ct.json"], stdout=io.StringIO(), stderr=stderr)
+    code = _cli.main(["login", "train", "--convert-legacy-config", "ct.json"], stdout=io.StringIO(), stderr=stderr)
     assert code == 2
     assert "takes no profile name" in stderr.getvalue()

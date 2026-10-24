@@ -137,7 +137,7 @@ which creates or picks one for you.
 command turns it into a Snowflake connection profile:
 
 ```bash
-cortex-training login --convert-old-config ~/cortex-training-config.json
+cortex-training login --convert-legacy-config ~/cortex-training-config.json
 ```
 
 It shows what the file holds (the PAT stays hidden), then asks before each step:

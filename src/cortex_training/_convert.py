@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""``cortex-training login --convert-old-config PATH``: turn an old JSON config into a profile.
+"""``cortex-training login --convert-legacy-config PATH``: turn an old JSON config into a profile.
 
 An old JSON config holds a host, a programmatic access token (PAT), a
 database, and settings. Converting it:
@@ -460,7 +460,7 @@ def run_convert(
     interactive: bool | None = None,
     open_client: Callable[[OldConfig], Any] = open_pat_client,
 ) -> int:
-    """Run ``cortex-training login --convert-old-config PATH``; return the exit code."""
+    """Run ``cortex-training login --convert-legacy-config PATH``; return the exit code."""
     if interactive is None:
         interactive = stdin.isatty() and stderr.isatty()
     if not interactive:
