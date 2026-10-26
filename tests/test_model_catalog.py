@@ -275,10 +275,10 @@ def test_moe_sft_recipes_have_runnable_parallelism():
         ),
         "deepseek-v4.1-flash/long/h200-training-lora.json": (
             "deepseek-ai/DeepSeek-V4.1-Flash-1017",
-            32,
-            32,
+            16,
+            16,
             262144,
-            32,
+            16,
             1,
         ),
     }
