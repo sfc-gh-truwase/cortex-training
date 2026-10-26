@@ -225,6 +225,21 @@ def test_a_working_saved_profile_is_kept_by_default(isolated):
     assert config() == {"profile": "train"}
 
 
+def test_a_saved_profile_that_fails_is_not_the_list_s_default(isolated):
+    write_profiles(isolated, PROFILES)
+    _picker.save_profile("prod")
+    world = World(databases={"TRAIN_DB", "ANALYTICS_DB"})
+    world.sign_in_error["prod"] = "Incorrect username or password was specified."
+    # Skip the account check, then press Enter at the list and at the database question.
+    code, summary, err = login(world, ["n", "", ""])
+    assert code == 0
+    assert "Profile prod doesn't work right now." in err
+    assert status(err, "prod").startswith("✗ Didn't work just now: Profile prod couldn't sign in")
+    # Enter takes the list's default, which is a working profile, not prod again.
+    assert summary["profile"] == "train"
+    assert config() == {"profile": "train"}
+
+
 def test_declining_the_saved_profile_lets_the_user_pick_another(isolated):
     write_profiles(isolated, PROFILES)
     _picker.save_profile("train")
@@ -559,6 +574,23 @@ def test_same_identity_rules(isolated, candidate, matches):
     assert (flow.same_identity("base", "TRAINER") == ["candidate"]) is matches
 
 
+def test_ctrl_d_at_the_token_prompt_cancels_without_a_traceback(isolated, monkeypatch):
+    # In a terminal the token is read with getpass, which raises EOFError at Ctrl-D.
+    import sys
+
+    def end_of_input(*args, **kwargs):
+        raise EOFError
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO("acme-main.snowflakecomputing.com\nME\n\n"))
+    monkeypatch.setattr(_login.getpass, "getpass", end_of_input)
+    stderr = io.StringIO()
+    code = _login.run_login(None, stdin=sys.stdin, stdout=io.StringIO(), stderr=stderr, interactive=True, open_client=World().open)
+    assert code == 1
+    assert "no input" in stderr.getvalue()
+    assert "Traceback" not in stderr.getvalue()
+    assert _profiles.read_profiles() == {}
+
+
 # ─── Hosts ──────────────────────────────────────────────────────────────────
 
 
@@ -576,7 +608,31 @@ def test_validate_host(raw, host):
     assert _login.validate_host(raw) == host
 
 
-@pytest.mark.parametrize("raw", ["app.snowflake.com/acme", "not a host", "localhost"])
+@pytest.mark.parametrize(
+    ("raw", "host"),
+    [
+        # A query string or fragment on a pasted Snowsight URL isn't part of the account.
+        ("https://app.snowflake.com/acme/main?x=1", "acme-main.snowflakecomputing.com"),
+        ("https://app.snowflake.com/acme/main/?from=email#/homepage", "acme-main.snowflakecomputing.com"),
+        ("acme.snowflakecomputing.com:443", "acme.snowflakecomputing.com:443"),
+    ],
+)
+def test_validate_host_takes_only_the_account_from_a_url(raw, host):
+    assert _login.validate_host(raw) == host
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "app.snowflake.com/acme",
+        "not a host",
+        "localhost",
+        "acme-main.snowflakecomputing.com?x",
+        "acme-main.snowflakecomputing.com#x",
+        "acme@main.snowflakecomputing.com",
+        "acme..snowflakecomputing.com",
+    ],
+)
 def test_validate_host_rejects(raw):
     with pytest.raises(ValueError):
         _login.validate_host(raw)

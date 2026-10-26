@@ -35,6 +35,7 @@ from __future__ import annotations
 import getpass
 import json
 import os
+import re
 import sys
 from collections.abc import Callable
 from collections.abc import Mapping
@@ -208,6 +209,11 @@ def _encrypted_key_without_passphrase(values: Mapping[str, Any]) -> bool:
         return False
 
 
+# An account host: dot-separated labels of letters, digits, "_", and "-", with an
+# optional port. The same rule as the picker's CORTEX_TRAINING_HOST check.
+_HOST = re.compile(r"[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+(:[0-9]{1,5})?")
+
+
 def validate_host(raw: str) -> str:
     """Return a bare account host from a host or a Snowsight URL, or raise ValueError."""
     host = raw.strip()
@@ -221,7 +227,7 @@ def validate_host(raw: str) -> str:
         #   app.snowflake.com/REGION/LOCATOR  -> LOCATOR.REGION.snowflakecomputing.com
         # Organization names are only letters and digits, so a "-" or "." in the
         # first part marks a region (us-west-2, us-east-2.aws, east-us-2.azure).
-        parts = [part for part in path.split("#", 1)[0].split("/") if part]
+        parts = [part for part in path.split("#", 1)[0].split("?", 1)[0].split("/") if part]
         if len(parts) < 2:
             raise ValueError(
                 "That Snowsight URL is missing a part. Expected app.snowflake.com/ORG/ACCOUNT, "
@@ -233,7 +239,7 @@ def validate_host(raw: str) -> str:
             host = f"{second}.{first}.snowflakecomputing.com"
         else:
             host = f"{first}-{second}.snowflakecomputing.com"
-    if not host or " " in host or "." not in host:
+    if not _HOST.fullmatch(host):
         raise ValueError(f"{raw!r} isn't an account address. Expected ORG-ACCOUNT.snowflakecomputing.com.")
     return host
 
@@ -398,7 +404,11 @@ class _Prompter:
     def secret(self, label: str) -> str:
         while True:
             if self.stdin is sys.stdin:
-                value = getpass.getpass(self.style.bold(f"{label}: "), stream=self.stderr)
+                try:
+                    value = getpass.getpass(self.style.bold(f"{label}: "), stream=self.stderr)
+                except EOFError:
+                    # Ctrl-D ends input here as it does at the other prompts (see _readline).
+                    raise LoginCancelled("no input") from None
             else:
                 self._prompt(f"{label}: ")
                 value = self._readline()
@@ -922,6 +932,8 @@ def run_login(
         profiles = login.profiles()
         current = settings.get("profile")
         check: Check | None = None
+        # Profiles that failed during this run, and why: marked in the list, and never its default.
+        failed: dict[str, str] = {}
         if name is not None:
             if not _profiles._PROFILE_NAME.match(name):
                 raise LoginCancelled(f"{name!r} isn't a valid profile name. Use letters, digits, '_' or '-'.")
@@ -941,9 +953,11 @@ def run_login(
                     prompter.say()
                     profile = login.pick(current)
             else:
+                if existing.error:
+                    failed[current] = existing.error
                 prompter.say(f"Profile {current} doesn't work right now. Let's pick another one, or fix it.")
                 prompter.say()
-                profile = login.pick(current)
+                profile = login.pick(current, failed)
         else:
             if current:
                 prompter.say(
@@ -951,7 +965,6 @@ def run_login(
                 )
                 prompter.say()
             profile = login.pick(current)
-        failed: dict[str, str] = {}
         unchecked: str | None = None
         while True:
             try:
