@@ -354,10 +354,11 @@ and asking. Then it shows every change and asks once:
   profile is named `cortex-training`, or the next free name (an existing
   profile is never replaced). Its host is kept as written, and its account is
   the host's first part;
-- it saves the profile name in `config.json`, with the file's `endpoint`,
-  `poll_interval`, `poll_timeout`, and `verify_ssl` (`no_verify_ssl` becomes
-  `verify_ssl`). When `config.json` already sets one of these differently, it
-  asks which to keep;
+- it saves the profile name in `config.json`, which holds only the profile. The
+  file's `endpoint`, `poll_interval`, `poll_timeout`, and `verify_ssl` (or
+  `no_verify_ssl`) aren't kept: it lists any that differ from the defaults,
+  with the flags that set them (`--endpoint`, `--poll-interval`,
+  `--poll-timeout`, `--no-verify-ssl`);
 - it saves a copy of the file without the PAT as `PATH.bak`;
 - it deletes the file, and `login.json` if it points to it.
 

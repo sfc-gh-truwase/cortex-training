@@ -149,9 +149,11 @@ It shows what the file holds (the PAT stays hidden), then asks before each step:
    nothing.
 2. **It shows every change and asks once.** The changes are:
    - adding the profile (named `cortex-training`, or the next free name);
-   - saving it as `"profile"` in `~/.config/cortex-training/config.json`, along
-     with the file's `endpoint`, `poll_interval`, `poll_timeout`, and
-     `verify_ssl`;
+   - saving it as `"profile"` in `~/.snowflake/cortex-training/config.json`.
+     That file holds only the profile, so the old file's `endpoint`,
+     `poll_interval`, `poll_timeout`, and `verify_ssl` aren't kept; the converter
+     lists any that differ from the defaults, with the flags that set them
+     (`--no-verify-ssl` for `verify_ssl: false`);
    - saving a copy of the old file without the PAT, as `<file>.bak`;
    - deleting the old file, and `login.json` if it points to that file.
 

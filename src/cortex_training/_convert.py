@@ -155,8 +155,8 @@ def explain(exc: BaseException, old: OldConfig) -> str:
     """Say in plain words why a request with the old file's PAT failed, and what to do."""
     import requests
 
-    from cortex_training.snowflake_auth import credentials_rejected_hint
-    from cortex_training.snowflake_auth import rest_host
+    from cortex_training.client.auth import credentials_rejected_hint
+    from cortex_training.client.auth import rest_host
 
     text = str(exc)
     if isinstance(exc, requests.exceptions.ConnectionError):
@@ -241,7 +241,7 @@ class _Converter:
         return identity
 
     def _check_service(self) -> None:
-        from cortex_training.client import _response_error_code
+        from cortex_training.client.core import _response_error_code
 
         try:
             self.client.get_capacity()
@@ -317,30 +317,15 @@ class _Converter:
             "database": old.database,
             "schema": old.schema,
         }
-        current, _ = _picker.load_config()
-        settings = dict(current)
-        for key in _SETTINGS:
-            if key not in old.settings:
-                continue
-            if key in current and current[key] != old.settings[key]:
-                self.p.say()
-                self.p.say(f"config.json already sets {key} to {current[key]}; the old config sets {old.settings[key]}.")
-                choice = self.p.choose(
-                    "Which should Cortex Training use?",
-                    [f"Keep {current[key]} (config.json)", f"Use {old.settings[key]} (the old config)"],
-                    default=0,
-                )
-                if choice == 0:
-                    continue
-            settings[key] = old.settings[key]
-        settings["profile"] = name
+        _picker.load_config()  # A config.json that can't be read back is an error, not overwritten.
+        # config.json holds only "profile"; the old file's other settings aren't kept.
+        settings = {"profile": name}
         login_file = _login_file_for(old.path)
         return Plan(profile=name, values=values, settings=settings, backup=_backup_path(old.path), login_file=login_file)
 
     def confirm(self, plan: Plan) -> None:
         old = self.old
         role = f", role {plan.values['role']}" if plan.values.get("role") else ""
-        moved = [key for key in _SETTINGS if key in old.settings and plan.settings.get(key) == old.settings[key]]
         self.p.rule()
         self.p.say("This will:")
         self.p.say(f"  1. Add profile {self.s.bold(plan.profile)} to {_login._home(_profiles.profile_file())}")
@@ -348,13 +333,41 @@ class _Converter:
             f"     (account {plan.values['account']}, host, user {plan.values['user']}{role}, the PAT, "
             f"database {old.database})"
         )
-        also = f", and move {', '.join(moved)} there" if moved else ""
-        self.p.say(f"  2. Set Cortex Training to use it, in {_login._home(_picker.config_path())}{also}")
+        self.p.say(f"  2. Set Cortex Training to use it, in {_login._home(_picker.config_path())}")
         self.p.say(f"  3. Save a copy of the old config without the PAT: {_login._home(plan.backup)}")
         deleted = _login._home(old.path) + (f" and {_login._home(plan.login_file)}" if plan.login_file else "")
         self.p.say(f"  4. Delete {deleted}")
+        dropped = _dropped_settings(old.settings)
+        if dropped:
+            self.p.say()
+            self.p.say(f"{self.s.warn('Not kept:')} {', '.join(dropped)}.")
+            self.p.say("   config.json holds only the profile now. Pass these when you run a command instead:")
+            self.p.say(f"   {_flags_for(old.settings)}")
         if not self.p.confirm("Go ahead?", default=True):
             raise ConvertError("Nothing was changed.")
+
+
+# The client's defaults. Old files often list these (the 3.1 template does), and
+# dropping a default changes nothing, so only other values are reported.
+_DEFAULTS = {"endpoint": "cortex-training", "poll_interval": 0.5, "poll_timeout": 1800.0, "verify_ssl": True}
+
+
+def _dropped_settings(settings: dict[str, Any]) -> list[str]:
+    """The old file's non-default settings, as ``name value``, that config.json can't hold."""
+    return [f"{key} {settings[key]}" for key in _SETTINGS if key in settings and settings[key] != _DEFAULTS[key]]
+
+
+def _flags_for(settings: dict[str, Any]) -> str:
+    """The CLI flags (and example arguments) that set what the old file set."""
+    flags = []
+    if settings.get("endpoint", _DEFAULTS["endpoint"]) != _DEFAULTS["endpoint"]:
+        flags.append(f"--endpoint {settings['endpoint']}")
+    for key in ("poll_interval", "poll_timeout"):
+        if settings.get(key, _DEFAULTS[key]) != _DEFAULTS[key]:
+            flags.append(f"--{key.replace('_', '-')} {settings[key]}")
+    if settings.get("verify_ssl") is False:
+        flags.append("--no-verify-ssl (verify_ssl=False in examples and the SDK)")
+    return ", ".join(flags) if flags else "(the defaults apply)"
 
 
 def _text(value: Any) -> str | None:
@@ -379,7 +392,7 @@ def _backup_path(path: Path) -> Path:
 
 def _login_file_for(path: Path) -> Path | None:
     """``login.json`` when it points to ``path``; it would point to a deleted file otherwise."""
-    from cortex_training import _cli
+    from cortex_training.cli import commands as _cli
 
     login_file = _cli._login_state_path()
     try:
@@ -500,8 +513,10 @@ def run_convert(
         prompter.say()
     prompter.say(style.green(style.bold("You're all set.")) + f" Cortex Training will use profile {style.bold(plan.profile)}.")
     prompter.say(style.dim(f"(The old config is saved without its PAT in {_login._home(plan.backup)}.)"))
+    if _dropped_settings(old.settings):
+        prompter.say(f"Not kept: {', '.join(_dropped_settings(old.settings))}. Pass them as {_flags_for(old.settings)}.")
     prompter.say()
-    prompter.say("Run your command again.")
+    prompter.say(f"Try it:  {style.cyan(f'cortex-training --connection {plan.profile} capacity')}")
     _login.remind_environment(prompter, findings, shell)
     if not getattr(stdout, "isatty", lambda: False)():
         json.dump(

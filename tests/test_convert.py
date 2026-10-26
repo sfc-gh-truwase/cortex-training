@@ -7,7 +7,7 @@ import re
 import pytest
 import requests
 
-from cortex_training import _cli
+import cortex_training.cli.commands as _cli
 from cortex_training import _convert
 from cortex_training import _picker
 from cortex_training import _profiles
@@ -167,14 +167,17 @@ def test_an_old_config_becomes_a_profile_and_settings(old_file, isolated):
             "schema": "RUNS",
         }
     }
-    assert config() == {"poll_timeout": 3600, "endpoint": "ct", "profile": "cortex-training"}
+    # config.json holds only the profile; the plan and the ending say what wasn't kept.
+    assert config() == {"profile": "cortex-training"}
+    assert err.count("Not kept: endpoint ct, poll_timeout 3600.") == 2
+    assert "--endpoint ct, --poll-timeout 3600" in err
     assert not path.exists()
     backup = json.loads(path.with_name("ct-config.json.bak").read_text())
     assert backup == {"host": HOST, "database": "MY_DB", "schema": "RUNS", "poll_timeout": 3600, "endpoint": "ct"}
     assert "  ✓ Database MY_DB is ready" in err
     assert "SHOW SCHEMAS LIKE 'RUNS' IN DATABASE MY_DB" in world.statements
     assert "You're all set. Cortex Training will use profile cortex-training." in err
-    assert "Run your command again." in err
+    assert "Try it:  cortex-training --connection cortex-training capacity" in err
     assert summary["profile"] == "cortex-training" and summary["deleted"] == [str(path)]
     assert PAT not in err and PAT not in json.dumps(summary)
 
@@ -196,7 +199,8 @@ def test_the_connection_wrapper_and_old_spellings_are_read(old_file):
     code, _, err = convert(World(), path, YES)
     assert code == 0, err
     assert _profiles.read_profiles()["cortex-training"]["database"] == "CORTEX_TRAINING_DB"
-    assert config() == {"verify_ssl": False, "profile": "cortex-training"}
+    assert config() == {"profile": "cortex-training"}
+    assert "Not kept: verify_ssl False." in err and "--no-verify-ssl" in err
     assert json.loads(path.with_name("ct-config.json.bak").read_text()) == {
         "connection": {"host": HOST, "db": "CORTEX_TRAINING_DB", "no_verify_ssl": True}
     }
@@ -358,17 +362,25 @@ def test_a_taken_name_gets_the_next_free_one_and_is_never_replaced(old_file, iso
     assert summary["profile"] == "cortex-training-2"
 
 
-def test_a_setting_that_differs_from_config_json_is_asked_about(old_file):
+def test_settings_at_their_defaults_are_not_reported(old_file):
+    # The 3.1 bug bash file lists every setting at its default; dropping them changes nothing.
+    path = old_file({"host": HOST, "pat": PAT, "endpoint": "cortex-training", "poll_interval": 0.5,
+                     "poll_timeout": 1800.0, "verify_ssl": True})
+    code, _, err = convert(World(), path, YES)
+    assert code == 0, err
+    assert "Not kept" not in err
+    assert config() == {"profile": "cortex-training"}
+
+
+def test_a_config_json_that_can_t_be_read_back_stops_before_anything_changes(old_file, isolated):
     _picker.config_path().parent.mkdir(parents=True)
     _picker.config_path().write_text(json.dumps({"poll_timeout": 60}))
-    path = old_file({"host": HOST, "pat": PAT, "poll_timeout": 3600})
-    # Check -> name -> keep config.json's value [1] -> go ahead
-    code, _, err = convert(World(), path, ["", "", "", ""])
-    assert code == 0, err
-    explained = err.index("config.json already sets poll_timeout to 60; the old config sets 3600.\n")
-    # The explanation, then the choices, then a short question.
-    assert explained < err.index("1  Keep 60 (config.json)") < err.index("Which should Cortex Training use? [1]")
-    assert config() == {"poll_timeout": 60, "profile": "cortex-training"}
+    path = old_file()
+    code, _, err = convert(World(), path, ["", ""])
+    assert code == 1
+    assert 'it holds only "profile"' in err
+    assert json.loads(_picker.config_path().read_text()) == {"poll_timeout": 60}
+    assert path.exists() and "cortex-training" not in _profiles.read_profiles()
 
 
 def test_declining_the_plan_changes_nothing(old_file, isolated):
