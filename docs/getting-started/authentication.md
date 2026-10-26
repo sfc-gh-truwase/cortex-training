@@ -121,7 +121,7 @@ finds one stops, and in a terminal it offers to convert the file for you.
 connection profile:
 
 ```bash
-cortex-training login --convert-old-config ~/cortex-training-config.json
+cortex-training login --convert-legacy-config ~/cortex-training-config.json
 ```
 
 It shows what the file holds (the PAT stays hidden), then asks before each step:

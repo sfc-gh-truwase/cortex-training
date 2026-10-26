@@ -416,9 +416,11 @@ def test_a_failed_delete_puts_every_file_back(old_file, isolated, monkeypatch):
             raise PermissionError(13, "Permission denied")
         return real_unlink(self, *args, **kwargs)
 
-    monkeypatch.setattr(type(path), "unlink", fail_on_login_file)
-    code, _, err = convert(World(), path, YES)
-    monkeypatch.undo()
+    # Only this patch is undone before the checks; monkeypatch.undo() would also undo
+    # the isolated folders, and the checks would then read the real ones.
+    with monkeypatch.context() as patch:
+        patch.setattr(type(path), "unlink", fail_on_login_file)
+        code, _, err = convert(World(), path, YES)
     assert code == 1
     assert "so every file was put back as it was." in err
     assert path.exists() and json.loads(path.read_text())["pat"] == PAT
@@ -439,6 +441,6 @@ def test_it_needs_a_terminal(old_file):
 
 def test_the_flag_takes_no_profile_name():
     stderr = io.StringIO()
-    code = _cli.main(["login", "train", "--convert-old-config", "ct.json"], stdout=io.StringIO(), stderr=stderr)
+    code = _cli.main(["login", "train", "--convert-legacy-config", "ct.json"], stdout=io.StringIO(), stderr=stderr)
     assert code == 2
     assert "takes no profile name" in stderr.getvalue()

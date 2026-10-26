@@ -316,7 +316,7 @@ remembered a JSON config, are no longer supported. To turn a JSON config into a
 Snowflake connection profile:
 
 ```bash
-cortex-training login --convert-old-config PATH
+cortex-training login --convert-legacy-config PATH
 ```
 
 It reads the file's `host`, `pat`, `database`, and `schema` (also inside a
