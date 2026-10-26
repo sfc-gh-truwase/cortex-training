@@ -61,7 +61,7 @@ or a file remembered by an older `cortex-training login`). Convert it into a
 profile once:
 
 ```bash
-cortex-training login --convert-old-config ~/cortex-training-config.json
+cortex-training login --convert-legacy-config ~/cortex-training-config.json
 ```
 
 In a terminal, a command that finds an old JSON config offers to do this for

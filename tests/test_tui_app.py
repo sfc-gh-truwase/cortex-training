@@ -3522,7 +3522,7 @@ def test_the_tui_offers_to_convert_an_old_config(tmp_path, monkeypatch, capsys):
     assert tui_main.run(["--config", str(path)]) == 2
     err = capsys.readouterr().err
     assert f"signing in with an old JSON config ({path}, from --config) is no longer supported." in err
-    assert f"cortex-training login --convert-old-config {path}" in err
+    assert f"cortex-training login --convert-legacy-config {path}" in err
 
 
 @pytest.mark.parametrize("flags", [["--host", "x.test"], ["--pat", "tok"]])

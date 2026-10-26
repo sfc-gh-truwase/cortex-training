@@ -3490,7 +3490,7 @@ def test_an_old_config_without_a_terminal_says_how_to_convert_it(tmp_path, monke
     assert rc == 2
     err = stderr.getvalue()
     assert f"signing in with an old JSON config ({config}, from {source}) is no longer supported." in err
-    assert f"To convert it, run in a terminal:  cortex-training login --convert-old-config {config}" in err
+    assert f"To convert it, run in a terminal:  cortex-training login --convert-legacy-config {config}" in err
 
 
 def test_an_old_config_in_a_terminal_offers_to_convert_it(tmp_path, monkeypatch):
@@ -3510,7 +3510,7 @@ def test_declining_to_convert_changes_nothing_and_says_how_later(tmp_path, monke
     stderr = _Terminal()
     rc = cli.main(["--config", str(config), "list"], stdin=_TerminalInput("n\n"), stderr=stderr)
     assert rc == 2
-    assert f"Nothing was changed. To convert it later, run:  cortex-training login --convert-old-config {config}" in stderr.getvalue()
+    assert f"Nothing was changed. To convert it later, run:  cortex-training login --convert-legacy-config {config}" in stderr.getvalue()
     assert config.exists()
 
 

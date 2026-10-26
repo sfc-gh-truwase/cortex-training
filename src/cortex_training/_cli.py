@@ -831,7 +831,7 @@ def offer_convert(found: OldConfigFile, stdin: TextIO, stdout: TextIO, stderr: T
 
     from cortex_training._login import _Prompter
 
-    command = f"cortex-training login --convert-old-config {shlex.quote(found.path)}"
+    command = f"cortex-training login --convert-legacy-config {shlex.quote(found.path)}"
     stderr.write(
         f"error: signing in with an old JSON config ({found.path}, from {found.source}) is no longer supported. "
         "Cortex Training now signs in with a Snowflake connection profile, and can convert this file into one.\n"

@@ -85,7 +85,7 @@ cortex-training login training                # Use or create the profile "train
 cortex-training list                          # Use the profile login saved
 cortex-training --connection training list    # Use another profile for one command
 cortex-training --ct-config ./ct.json list    # Use another settings file
-cortex-training login --convert-old-config ~/old-config.json   # Convert an old JSON config
+cortex-training login --convert-legacy-config ~/old-config.json   # Convert an old JSON config
 ```
 
 ### [Submit Jobs](#submit-a-job)
@@ -243,7 +243,7 @@ and a database (`--config`, `CORTEX_TRAINING_CONFIG`, or a file remembered by
 connects:
 
 - in a terminal, it explains and asks `Convert it now? [Y/n]`; yes runs
-  `cortex-training login --convert-old-config PATH` (see [Login](#login)), and you
+  `cortex-training login --convert-legacy-config PATH` (see [Login](#login)), and you
   then run your command again;
 - otherwise it prints that command and exits with status 2.
 

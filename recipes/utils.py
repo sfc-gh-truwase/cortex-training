@@ -107,7 +107,7 @@ def warn_old_config(config_path: str) -> None:
         "Snowflake connection profile, like the cortex-training CLI.\n\n"
         "To switch (once):\n"
         "  1. Convert your old config into a profile:\n"
-        "       cortex-training login --convert-old-config %s\n"
+        "       cortex-training login --convert-legacy-config %s\n"
         "  2. Then run the same command without config=:\n"
         "       %s\n\n"
         "To use a profile other than your default, add connection=NAME.",

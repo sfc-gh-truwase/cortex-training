@@ -60,7 +60,7 @@ def test_config_still_works_with_a_warning_that_gives_the_new_command(recorded, 
     assert kind == "pat" and kwargs["host"] == "acme.snowflakecomputing.com" and kwargs["database"] == "MY_DB"
     text = caplog.text
     assert "config= is deprecated and stops working in cortex-training 0.2.0." in text
-    assert f"cortex-training login --convert-old-config {old}" in text
+    assert f"cortex-training login --convert-legacy-config {old}" in text
     assert "python -m recipes.sft.conversational.train job_config=configs/qwen3_8b_lora.json" in text
     assert "add connection=NAME" in text
     assert "tok" not in text
