@@ -2690,6 +2690,39 @@ class CortexTrainingClient:
         """OpenAI-compatible base URL for deployments in this database and schema."""
         return f"{self._prefix}/inference/v1"
 
+    def model_deployment_headers(self, *, refresh: bool = False) -> dict[str, str]:
+        """Return the auth headers for calling a deployment's chat endpoint.
+
+        The inference endpoint authenticates the same identity as the REST API
+        but in the form each credential needs:
+
+        - PAT clients (:meth:`from_pat`) get ``Authorization: Bearer <pat>`` and
+          ``X-Snowflake-Authorization-Token-Type: PROGRAMMATIC_ACCESS_TOKEN``.
+        - Profile clients (:meth:`from_connection_name`) get
+          ``Authorization: Snowflake Token="<session token>"``. The token is read
+          from the Connector session on every call, so a session that was
+          recreated is picked up. ``refresh=True`` first recreates the session
+          (unless another thread already did); use it once after a 401.
+        - Other clients (a bare ``base_url``) return whatever auth headers their
+          HTTP session carries, possibly none.
+
+        The result holds a secret: build it per request and never log it. It has
+        no ``Content-Type``; callers add their own. An OpenAI-style client must
+        also send ``Accept: application/json``, or the endpoint answers 400.
+        """
+        auth = self._auth_provider
+        if auth is not None:
+            token = auth.get_token()
+            if refresh:
+                token = auth.refresh(token)
+            return {"Authorization": f'Snowflake Token="{token}"'}
+        headers = self._session.headers
+        return {
+            name: str(headers[name])
+            for name in ("Authorization", "X-Snowflake-Authorization-Token-Type")
+            if name in headers
+        }
+
     def emit_metric(
         self,
         operation: str,

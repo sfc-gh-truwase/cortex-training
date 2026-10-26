@@ -45,6 +45,9 @@ class FakeResponse:
     def json(self):
         return self._body
 
+    def close(self):
+        pass
+
     def __enter__(self):
         return self
 
@@ -53,13 +56,13 @@ class FakeResponse:
 
 
 class FakeSession:
-    def __init__(self, response):
-        self.response = response
+    def __init__(self, *responses):
+        self.responses = list(responses)
         self.calls = []
 
     def post(self, url, **kwargs):
         self.calls.append((url, kwargs))
-        return self.response
+        return self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
 
 
 @pytest.mark.parametrize("name", ["base-model.json", "checkpoint.json"])
@@ -217,10 +220,15 @@ class FakeClient:
     model_deployment_base_url = BASE_URL
 
     def __init__(self, wait_error=None, drop_error=None):
+        self.headers_calls = []
         self.wait_error = wait_error
         self.drop_error = drop_error
         self.created = []
         self.dropped = []
+
+    def model_deployment_headers(self, *, refresh=False):
+        self.headers_calls.append(refresh)
+        return {"Authorization": "Bearer PAT"}
 
     def create_model_deployment(self, spec):
         self.created.append(spec)
@@ -261,8 +269,8 @@ def deploy(monkeypatch, tmp_path):
 
     monkeypatch.setattr(module, "resolve_example_connection", fake_resolve)
 
-    def fake_stream_chat(base_url, pat, **kwargs):
-        state["calls"].append((base_url, pat, kwargs))
+    def fake_stream_chat(base_url, auth, **kwargs):
+        state["calls"].append((base_url, auth, kwargs))
         kwargs["on_delta"]("Hello")
         return streaming.ChatResult(text="Hello", time_to_first_token=0.1, total_seconds=0.2, chunks=1)
 
@@ -279,8 +287,9 @@ def test_deploy_creates_streams_and_drops(deploy, capsys):
     client = deploy["client"]
     assert client.created == [json.loads((EXAMPLE_DIR / "configs/base-model.json").read_text())]
     assert client.dropped == [DEPLOYMENT_ID]
-    base_url, pat, kwargs = deploy["calls"][0]
-    assert (base_url, pat, kwargs["model"]) == (BASE_URL, "PAT", DEPLOYMENT_ID)
+    base_url, auth, kwargs = deploy["calls"][0]
+    assert (base_url, kwargs["model"]) == (BASE_URL, DEPLOYMENT_ID)
+    assert auth(refresh=False) == {"Authorization": "Bearer PAT"}
     assert capsys.readouterr().out == "Hello\n"
 
 
@@ -331,18 +340,70 @@ def test_deploy_is_an_entrypoint():
     assert "chz.nested_entrypoint(main)" in source
 
 
-def test_deploy_without_pat_fails_before_creating_a_deployment(deploy):
-    deploy["pat"] = None
-    with pytest.raises(ValueError, match="calls the inference endpoint with a PAT"):
-        deploy["main"](deploy["config"]())
-    assert deploy["client"].created == []
-    assert deploy["calls"] == []
-
-
-def test_deploy_profile_without_pat_names_the_profile(deploy):
+@pytest.mark.parametrize("connection", [None, "training"])
+def test_deploy_runs_without_a_pat(deploy, connection):
     deploy["pat"] = None
     module = deploy["module"]
-    config = module.Config(connection="training")
-    with pytest.raises(ValueError, match="connection profile 'training'"):
-        deploy["main"](config)
-    assert deploy["client"].created == []
+    config = module.Config(connection=connection) if connection else module.Config()
+    module.main(config)
+    assert deploy["client"].created and deploy["client"].dropped == [DEPLOYMENT_ID]
+    auth = deploy["calls"][0][1]
+    assert auth(refresh=True) == {"Authorization": "Bearer PAT"}
+    assert deploy["client"].headers_calls == [True]
+
+
+def test_stream_chat_with_header_function_retries_a_401_once_with_refresh():
+    refreshes = []
+
+    def headers(*, refresh=False):
+        refreshes.append(refresh)
+        return {"Authorization": 'Snowflake Token="new"' if refresh else 'Snowflake Token="old"'}
+
+    session = FakeSession(
+        FakeResponse(status_code=401, text="expired"),
+        FakeResponse(lines=sse(delta("ok", "stop"))),
+    )
+    result = streaming.stream_chat(
+        BASE_URL,
+        headers,
+        model=DEPLOYMENT_ID,
+        messages=streaming.chat_messages("Hi"),
+        max_completion_tokens=16,
+        temperature=0.0,
+        session=session,
+    )
+    assert result.text == "ok"
+    assert refreshes == [False, True]
+    sent = [kwargs["headers"] for _, kwargs in session.calls]
+    assert [h["Authorization"] for h in sent] == ['Snowflake Token="old"', 'Snowflake Token="new"']
+    assert all(h["Content-Type"] == "application/json" for h in sent)
+
+
+def test_a_second_401_is_an_error_and_a_pat_is_never_retried():
+    def complete(auth, session):
+        return streaming.complete_chat(
+            BASE_URL, auth, model=DEPLOYMENT_ID, messages=streaming.chat_messages("Hi"),
+            max_completion_tokens=16, temperature=0.0, session=session,
+        )
+
+    session = FakeSession(FakeResponse(status_code=401, text="no"))
+    with pytest.raises(streaming.DeploymentCallError, match="HTTP 401"):
+        complete(lambda refresh=False: {"Authorization": "x"}, session)
+    assert len(session.calls) == 2
+    session = FakeSession(FakeResponse(status_code=401, text="no"))
+    with pytest.raises(streaming.DeploymentCallError, match="HTTP 401"):
+        complete("PAT", session)
+    assert len(session.calls) == 1
+
+
+def test_pat_string_wire_headers_are_unchanged():
+    session = FakeSession(FakeResponse(body={"choices": [{"message": {"content": "x"}}]}))
+    streaming.complete_chat(
+        BASE_URL, "PAT", model=DEPLOYMENT_ID, messages=[], max_completion_tokens=1,
+        temperature=0.0, session=session,
+    )
+    assert session.calls[0][1]["headers"] == {
+        "Authorization": "Bearer PAT",
+        "X-Snowflake-Authorization-Token-Type": "PROGRAMMATIC_ACCESS_TOKEN",
+        "Content-Type": "application/json",
+    }

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from collections.abc import Iterable
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -46,6 +47,27 @@ def deployment_headers(pat: str) -> dict[str, str]:
         "X-Snowflake-Authorization-Token-Type": "PROGRAMMATIC_ACCESS_TOKEN",
         "Content-Type": "application/json",
     }
+
+
+# Either a PAT, or a function returning the auth headers (called with
+# ``refresh=True`` to retry once after a 401), such as
+# ``CortexTrainingClient.model_deployment_headers``.
+Auth = str | Callable[..., dict[str, str]]
+
+
+def _headers(auth: Auth, *, refresh: bool = False) -> dict[str, str]:
+    if isinstance(auth, str):
+        return deployment_headers(auth)
+    return {**auth(refresh=refresh), "Content-Type": "application/json"}
+
+
+def _post(http: requests.Session, url: str, auth: Auth, extra: dict[str, str], **kwargs: Any) -> requests.Response:
+    """POST with ``auth``; a 401 with refreshable auth is retried once."""
+    response = http.post(url, headers={**_headers(auth), **extra}, **kwargs)
+    if response.status_code == 401 and not isinstance(auth, str):
+        response.close()
+        response = http.post(url, headers={**_headers(auth, refresh=True), **extra}, **kwargs)
+    return response
 
 
 def chat_messages(prompt: str, system: str | None = None) -> list[dict[str, str]]:
@@ -130,7 +152,7 @@ def _raise_for_status(response: requests.Response) -> None:
 
 def stream_chat(
     base_url: str,
-    pat: str,
+    auth: Auth,
     *,
     model: str,
     messages: list[dict[str, str]],
@@ -146,9 +168,11 @@ def stream_chat(
     result = ChatResult()
     deltas: list[str] = []
     started = time.monotonic()
-    with http.post(
+    with _post(
+        http,
         f"{base_url.rstrip('/')}/chat/completions",
-        headers={**deployment_headers(pat), "Accept": "text/event-stream"},
+        auth,
+        {"Accept": "text/event-stream"},
         json={
             "model": model,
             "messages": messages,
@@ -185,7 +209,7 @@ def stream_chat(
 
 def complete_chat(
     base_url: str,
-    pat: str,
+    auth: Auth,
     *,
     model: str,
     messages: list[dict[str, str]],
@@ -198,9 +222,11 @@ def complete_chat(
     """Run one non-streaming chat completion."""
     http = session or requests.Session()
     started = time.monotonic()
-    response = http.post(
+    response = _post(
+        http,
         f"{base_url.rstrip('/')}/chat/completions",
-        headers=deployment_headers(pat),
+        auth,
+        {},
         json={
             "model": model,
             "messages": messages,
