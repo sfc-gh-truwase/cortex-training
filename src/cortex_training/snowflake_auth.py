@@ -53,9 +53,10 @@ def rest_host(host: str) -> str:
     """Return ``host`` with underscores in its account label turned into dashes.
 
     Snowsight shows an account named ``MY_ACCT`` as ``my_acct.<region>...``,
-    and the Connector signs in with it, but Snowflake's certificates name
-    ``my-acct``, so standard HTTPS clients reject the underscore form. Hosts
-    outside Snowflake's domains are returned unchanged.
+    and the Connector signs in with it. But Snowflake's certificates are
+    wildcards (for example, ``*.snowflakecomputing.com``), and a wildcard can't
+    match a label containing ``_``, so standard HTTPS clients reject the
+    underscore form. Hosts outside Snowflake's domains are returned unchanged.
     """
     name, sep, port = host.partition(":")
     if not name.lower().endswith(_SNOWFLAKE_DOMAINS):
@@ -203,6 +204,15 @@ class SnowflakeProfileAuth:
         with self._lock:
             self._require_open()
             value = getattr(self._connection, "database", None)
+            return value if isinstance(value, str) and value else None
+
+    @property
+    def role(self) -> str | None:
+        """The session's role, as Snowflake reported it at sign-in (no SQL)."""
+        self._ensure_process()
+        with self._lock:
+            self._require_open()
+            value = getattr(self._connection, "role", None)
             return value if isinstance(value, str) and value else None
 
     @property
