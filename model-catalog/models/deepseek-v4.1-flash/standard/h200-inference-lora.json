@@ -14,7 +14,10 @@
           "tensor_parallel_size": 8,
           "enable_expert_parallel": true,
           "gpu_memory_utilization": 0.8,
-          "reasoning_parser": "deepseek_v41"
+          "reasoning_parser": "deepseek_v41",
+          "extra_engine_kwargs": {
+            "swa_bounded_replay": false
+          }
         },
         "peft_config": {
           "peft_type": "Lora",
@@ -28,6 +31,10 @@
             "wq_b",
             "wo_b"
           ]
+        },
+        "router_replay": {
+          "enabled": true,
+          "max_cache_bytes": 4294967296
         }
       }
     }

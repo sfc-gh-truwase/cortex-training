@@ -407,6 +407,19 @@ def test_moe_sft_recipes_have_runnable_parallelism():
             assert ds_config["bf16"]["bf16_master_weights_and_grads"] is True
 
 
+def test_deepseek_v41_sampler_captures_every_layer_for_router_replay():
+    config_dir = REPO_ROOT / "model-catalog" / "models" / "deepseek-v4.1-flash"
+    for profile in ("standard", "long"):
+        sampling = json.loads((config_dir / profile / "h200-inference-lora.json").read_text())
+        training = json.loads((config_dir / profile / "h200-training-lora.json").read_text())
+        inference = sampling["sub_job_configs"][0]["inference_config"]
+        assert training["sub_job_configs"][0]["training_config"]["router_replay"]["enabled"] is True
+        assert inference["router_replay"]["enabled"] is True
+        # Bounded replay runs the layers after the last KV source on each request's trailing window
+        # only, so the sampler never routes most prompt tokens through them.
+        assert inference["vllm_config"]["extra_engine_kwargs"]["swa_bounded_replay"] is False
+
+
 def test_moe_rl_recipes_have_runnable_parallelism():
     # model, train gpus, ep, sample gpus, attention, seq, sp, batch
     expected = {
