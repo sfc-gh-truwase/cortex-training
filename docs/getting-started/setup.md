@@ -22,7 +22,7 @@ cortex-training login
 It picks one of your Snowflake connection profiles or creates one (account
 host, user, and a programmatic access token), checks the database Cortex
 Training will use, and remembers the profile in
-`~/.config/cortex-training/config.json`. See [login](../reference/cli.md#login).
+`~/.snowflake/cortex-training/config.json`. See [login](../reference/cli.md#login).
 
 To set it up by hand instead, configure a standard Snowflake connection profile
 in `~/.snowflake/connections.toml`:

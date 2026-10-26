@@ -6,7 +6,7 @@ import pytest
 
 from cortex_training import _database_setup
 from cortex_training.client import CortexTrainingClient
-from cortex_training.snowflake_auth import SnowflakeProfileAuth
+from cortex_training.client.auth import SnowflakeProfileAuth
 from tests.test_snowflake_auth import FakeConnection
 from tests.test_snowflake_auth import FakeCursor
 

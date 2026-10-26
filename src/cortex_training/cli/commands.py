@@ -357,6 +357,7 @@ For a checkpoint, use:
 Only EVALUATION is supported today. gpu_type is H200, B200, or B300; gpus_per_replica is 1, 2, 4, or 8; and
 min_replicas * gpus_per_replica must be at most 8 or a multiple of 8. Use
 --dry-run to check a spec without creating anything.
+"""
 
 
 _LOGIN_DESCRIPTION = """\

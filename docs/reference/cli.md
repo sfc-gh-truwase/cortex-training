@@ -269,8 +269,8 @@ account, use `base_url` with an explicit scheme. This skips PAT auth:
 ### Login
 
 `cortex-training login` sets up the Snowflake connection profile Cortex Training
-uses, and remembers it as `"profile"` in `~/.config/cortex-training/config.json`
-(or `$XDG_CONFIG_HOME/cortex-training/config.json`):
+uses, and remembers it as `"profile"` in `~/.snowflake/cortex-training/config.json`
+(next to your profiles, so `$SNOWFLAKE_HOME` moves both):
 
 ```bash
 cortex-training login            # check the current setup, or pick a profile

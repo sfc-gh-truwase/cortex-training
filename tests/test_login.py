@@ -6,7 +6,7 @@ import textwrap
 
 import pytest
 
-from cortex_training import _cli
+import cortex_training.cli.commands as _cli
 from cortex_training import _database_setup
 from cortex_training import _login
 from cortex_training import _picker
@@ -260,14 +260,24 @@ def test_a_saved_profile_that_no_longer_exists_is_reported(isolated):
     assert config() == {"profile": "train"}
 
 
-def test_other_settings_in_config_json_are_kept(isolated):
+def test_config_json_holds_only_the_profile(isolated):
+    write_profiles(isolated, PROFILES)
+    code, _, _ = login(World(databases={"TRAIN_DB"}), ["n", "3", "1"])
+    assert code == 0
+    assert config() == {"profile": "train"}
+    # It lives next to the profiles, so SNOWFLAKE_HOME moves both.
+    assert _picker.config_path() == isolated / "cortex-training" / "config.json"
+
+
+def test_a_config_json_login_can_t_read_is_reported_not_overwritten(isolated):
     write_profiles(isolated, PROFILES)
     path = _picker.config_path()
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps({"poll_interval": 2}))
-    code, _, _ = login(World(databases={"TRAIN_DB"}), ["n", "3", "1"])
-    assert code == 0
-    assert config() == {"poll_interval": 2, "profile": "train"}
+    code, _, err = login(World(databases={"TRAIN_DB"}), ["n", "3", "1"])
+    assert code == 1
+    assert 'it holds only "profile"' in err
+    assert json.loads(path.read_text()) == {"poll_interval": 2}
 
 
 # ─── Picking a profile and its database ─────────────────────────────────────

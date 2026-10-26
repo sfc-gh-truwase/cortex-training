@@ -95,13 +95,14 @@ _VARIABLES = (
     _Variable(
         "SNOWFLAKE_HOME",
         CHANGES,
-        "Changes the folder Snowflake connection profiles are read from and saved to.",
+        "Changes the folder Snowflake connection profiles, and the choice you save here "
+        "(cortex-training/config.json), are read from and saved to. Terminals without it "
+        "won't see what you set up here.",
     ),
     _Variable(
         "XDG_CONFIG_HOME",
         CHANGES,
-        "Changes where Cortex Training saves your choice (config.json). Terminals without it "
-        "won't see what you set up here.",
+        "Changes where the older login.json (from `cortex-training login PATH`) is looked up.",
     ),
 )
 

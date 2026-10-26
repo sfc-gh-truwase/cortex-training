@@ -67,10 +67,13 @@ _PROFILE_KEYS = ("host", "pat", "base_url", "account", "user", "password", "toke
 # An account host such as ACCOUNT.snowflakecomputing.com, with an optional port.
 _HOST = re.compile(r"[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+(:[0-9]{1,5})?")
 
-_PICK_ANOTHER = "Pass connection=NAME (--connection NAME) to use another profile."
+_PICK_ANOTHER = (
+    "Pass connection=NAME (--connection NAME) to use another profile, "
+    "or run `cortex-training login` to pick or set one up."
+)
 _SETUP_HINT = (
-    "Create a Snowflake connection profile (for example with `snow connection add`) "
-    "and pass connection=NAME, or name it in \"profile\" in config.json."
+    "Run `cortex-training login` to set one up, or create one (for example with "
+    "`snow connection add`) and pass connection=NAME."
 )
 
 

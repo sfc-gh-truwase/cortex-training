@@ -576,7 +576,7 @@ class _Login:
     @staticmethod
     def service_error(check: Check) -> str | None:
         """Return why Cortex Training can't be used with this profile, or None if it can."""
-        from cortex_training.client import _response_error_code
+        from cortex_training.client.core import _response_error_code
 
         try:
             check.client.get_capacity()
