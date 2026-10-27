@@ -415,9 +415,10 @@ class DatabaseAccessError(requests.exceptions.HTTPError, RuntimeError):
     not found or not authorized". The client never creates a database; the
     message starts with the server's message, then says how to create it, get
     access, or use another.
-    ``kind`` is ``"database"`` or ``"schema"``, ``name`` the object, ``role``
-    the session's role (None when it can't be determined, as for PAT clients),
-    and ``statement`` the CREATE statement that would set it up.
+    ``kind`` is ``"schema"``, ``name`` the ``DATABASE.SCHEMA``, ``role`` the
+    session's role (None when it can't be determined, as for PAT clients), and
+    ``statement`` the CREATE DATABASE and CREATE SCHEMA statements that would
+    set it up, separated by ``; ``.
     """
 
     def __init__(
@@ -2976,10 +2977,6 @@ class CortexTrainingClient:
         database, schema = self.database, self.schema
         create_database = f"CREATE DATABASE IF NOT EXISTS {database}"
         create_schema = f"CREATE SCHEMA IF NOT EXISTS {database}.{schema}"
-        if schema.upper() == "PUBLIC":
-            kind, name, statement = "database", database, create_database
-        else:
-            kind, name, statement = "schema", f"{database}.{schema}", f"{create_database}; {create_schema}"
         # The server's message is the same whether the database or the schema is missing, or
         # the role can't use either, so the explanation covers all three.
         lines = [
@@ -2998,7 +2995,12 @@ class CortexTrainingClient:
             )
         lines.append("- Or use another database: --database NAME / CORTEX_TRAINING_DATABASE.")
         return DatabaseAccessError(
-            "\n".join(lines), response=response, kind=kind, name=name, role=role, statement=statement
+            "\n".join(lines),
+            response=response,
+            kind="schema",
+            name=f"{database}.{schema}",
+            role=role,
+            statement=f"{create_database}; {create_schema}",
         )
 
     def _redact_for_log(self, text: str) -> str:

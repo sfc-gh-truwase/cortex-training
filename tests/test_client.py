@@ -8225,7 +8225,8 @@ class TestMissingDatabase:
         c._session.get.assert_called_once()  # not retried
         error = exc.value
         assert (error.kind, error.name, error.role, error.statement) == (
-            "database", "MY_DB", None, "CREATE DATABASE IF NOT EXISTS MY_DB"
+            "schema", "MY_DB.PUBLIC", None,
+            "CREATE DATABASE IF NOT EXISTS MY_DB; CREATE SCHEMA IF NOT EXISTS MY_DB.PUBLIC",
         )
         assert "cortex-training login" not in str(error)  # not on main until the new login ships
         assert error.response.status_code == 400
