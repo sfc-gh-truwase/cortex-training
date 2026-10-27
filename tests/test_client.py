@@ -8211,12 +8211,14 @@ class TestMissingDatabase:
         assert str(exc.value) == (
             "HTTP 400 (517602): Schema MY_DB.SCH is not found or not authorized\n"
             "Your PAT's role (its role restriction, or your user's DEFAULT_ROLE if it has none) "
-            "can't find database MY_DB.\n"
+            "can't find database MY_DB or its schema PUBLIC.\n"
             "- If that's the wrong role: restrict the PAT to a role that has access, or run "
             "`ALTER USER <USER> SET DEFAULT_ROLE = <ROLE>`. Snowsight shows the token's role under "
             "Settings > Authentication.\n"
-            "- If it doesn't exist: run `CREATE DATABASE IF NOT EXISTS MY_DB` (or ask an admin to).\n"
-            "- If it exists: ask an admin to run `GRANT USAGE ON DATABASE MY_DB TO ROLE <ROLE>`.\n"
+            "- If they don't exist: run `CREATE DATABASE IF NOT EXISTS MY_DB` and "
+            "`CREATE SCHEMA IF NOT EXISTS MY_DB.PUBLIC` (or ask an admin to).\n"
+            "- If they exist: ask an admin to run `GRANT USAGE ON DATABASE MY_DB TO ROLE <ROLE>` and "
+            "`GRANT USAGE ON SCHEMA MY_DB.PUBLIC TO ROLE <ROLE>`.\n"
             "- Or use another database: --database NAME / CORTEX_TRAINING_DATABASE."
         )
         c._session.post.assert_not_called()  # no SQL, nothing created
@@ -8237,9 +8239,9 @@ class TestMissingDatabase:
         message = str(exc.value)
         assert message.startswith(
             "HTTP 400 (517602): Schema MY_DB.SCH is not found or not authorized\n"
-            "Role TRAINER can't find database MY_DB (from profile prod).\n"
+            "Role TRAINER can't find database MY_DB or its schema PUBLIC (from profile prod).\n"
         )
-        assert "GRANT USAGE ON DATABASE MY_DB TO ROLE TRAINER" in message
+        assert "GRANT USAGE ON SCHEMA MY_DB.PUBLIC TO ROLE TRAINER" in message
         assert "PAT" not in message
         assert exc.value.role == "TRAINER"
         c._session.post.assert_not_called()
@@ -8250,7 +8252,9 @@ class TestMissingDatabase:
         with pytest.raises(nc.DatabaseAccessError) as exc:
             c._send("GET", f"{c.base_url}/test")
         message = str(exc.value)
-        assert message.splitlines()[1] == "Role <ROLE> (couldn't determine your role) can't find database MY_DB."
+        assert message.splitlines()[1] == (
+            "Role <ROLE> (couldn't determine your role) can't find database MY_DB or its schema PUBLIC."
+        )
         assert "PAT" not in message
 
     def test_a_quoted_schema_name_is_explained_too(self):

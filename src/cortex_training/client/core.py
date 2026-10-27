@@ -2974,26 +2974,21 @@ class CortexTrainingClient:
             profile = getattr(self._auth_provider, "connection_name", None)
             source = f" (from profile {profile})" if profile else " (from your default Snowflake profile)"
         database, schema = self.database, self.schema
+        create_database = f"CREATE DATABASE IF NOT EXISTS {database}"
+        create_schema = f"CREATE SCHEMA IF NOT EXISTS {database}.{schema}"
         if schema.upper() == "PUBLIC":
-            kind, name, statement = "database", database, f"CREATE DATABASE IF NOT EXISTS {database}"
-            lines = [
-                f"HTTP 400 ({_INVALID_REQUEST_CODE}): {server_message}",
-                f"{who} can't find database {database}{source}.",
-                f"- If it doesn't exist: run `{statement}` (or ask an admin to).",
-                f"- If it exists: ask an admin to run `GRANT USAGE ON DATABASE {database} TO ROLE {grantee}`.",
-            ]
+            kind, name, statement = "database", database, create_database
         else:
-            kind, name = "schema", f"{database}.{schema}"
-            create_database = f"CREATE DATABASE IF NOT EXISTS {database}"
-            create_schema = f"CREATE SCHEMA IF NOT EXISTS {database}.{schema}"
-            statement = f"{create_database}; {create_schema}"
-            lines = [
-                f"HTTP 400 ({_INVALID_REQUEST_CODE}): {server_message}",
-                f"{who} can't find database {database} or its schema {schema}{source}.",
-                f"- If they don't exist: run `{create_database}` and `{create_schema}` (or ask an admin to).",
-                f"- If they exist: ask an admin to run `GRANT USAGE ON DATABASE {database} TO ROLE {grantee}` "
-                f"and `GRANT USAGE ON SCHEMA {database}.{schema} TO ROLE {grantee}`.",
-            ]
+            kind, name, statement = "schema", f"{database}.{schema}", f"{create_database}; {create_schema}"
+        # The server's message is the same whether the database or the schema is missing, or
+        # the role can't use either, so the explanation covers all three.
+        lines = [
+            f"HTTP 400 ({_INVALID_REQUEST_CODE}): {server_message}",
+            f"{who} can't find database {database} or its schema {schema}{source}.",
+            f"- If they don't exist: run `{create_database}` and `{create_schema}` (or ask an admin to).",
+            f"- If they exist: ask an admin to run `GRANT USAGE ON DATABASE {database} TO ROLE {grantee}` "
+            f"and `GRANT USAGE ON SCHEMA {database}.{schema} TO ROLE {grantee}`.",
+        ]
         if not role and sent_pat:
             lines.insert(
                 2,
