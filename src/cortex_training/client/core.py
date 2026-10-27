@@ -310,9 +310,13 @@ _ENDED_JOB_STATES = frozenset(
 # out the service's read-after-create window.
 _RECENTLY_CREATED_SECONDS = 120.0
 _SESSION_EXPIRED_CODES = frozenset({"390111", "390112", "390114"})
-# The Cortex Training API's code, on an HTTP 400, for a database or schema in the
-# URL path that it cannot resolve. The client explains it; it never creates one.
-_DATABASE_NOT_RESOLVED_CODE = "517602"
+# The Cortex Training API's generic invalid-request code. On its own it says
+# nothing about the database: only an HTTP 400 with this code whose message
+# says the URL path's DATABASE.SCHEMA can't be resolved is explained as one
+# (the API says "Schema" whether the database or the schema is missing, and
+# quotes names that need it). The client never creates a database.
+_INVALID_REQUEST_CODE = "517602"
+_DATABASE_NOT_RESOLVED_MESSAGE = re.compile(r"^Schema .+ is not found or not authorized$")
 _CHUNK_GROUP_RESTART_REQUIRED = "chunk_group_restart_required"
 _CHUNK_GROUP_ERROR_CODES = {
     _CHUNK_GROUP_RESTART_REQUIRED,
@@ -410,8 +414,11 @@ class ChunkGroupConflictError(ChunkGroupError):
 class DatabaseAccessError(requests.exceptions.HTTPError, RuntimeError):
     """The configured database or schema can't be found by the current role.
 
-    Raised for the API's HTTP 400 with code 517602. The client never creates a
-    database; the message says how to create it, get access, or use another.
+    Raised for the API's HTTP 400 with code 517602 when its message says the
+    database or schema in the URL is not found or not authorized; other 517602
+    answers are plain ``HTTPError``. The client never creates a database; the
+    message says how to create it, get access, or use another, and ends with
+    what the server said.
     ``kind`` is ``"database"`` or ``"schema"``, ``name`` the object, ``role``
     the session's role (None when it can't be determined, as for PAT clients),
     and ``statement`` the CREATE statement that would set it up.
@@ -645,6 +652,22 @@ def _response_error_code(response: requests.Response | None) -> str | None:
         code = candidate.get("code") or candidate.get("error_code")
         if code is not None:
             return str(code)
+    return None
+
+
+def _database_not_resolved_message(response: requests.Response | None) -> str | None:
+    """The server's message when ``response`` says the URL's database or schema can't be resolved."""
+    if response is None:
+        return None
+    try:
+        body = response.json()
+    except Exception:
+        return None
+    for candidate in _iter_error_dicts(body):
+        code = candidate.get("code") or candidate.get("error_code")
+        message = str(candidate.get("message") or "").strip()
+        if str(code) == _INVALID_REQUEST_CODE and _DATABASE_NOT_RESOLVED_MESSAGE.match(message):
+            return message
     return None
 
 
@@ -2938,10 +2961,16 @@ class CortexTrainingClient:
             logger.debug("Could not read the session's role.", exc_info=True)
             return None
 
-    def _database_error(self, response: requests.Response) -> DatabaseAccessError:
-        """Explain an HTTP 400 with code 517602: the configured database or schema can't be found."""
+    def _database_error(self, response: requests.Response, server_message: str) -> DatabaseAccessError:
+        """Explain an HTTP 400 saying the configured database or schema can't be found."""
         role = self._current_role()
-        who = f"Role {role}" if role else "Role <ROLE> (couldn't determine your role)"
+        if role:
+            who = f"Role {role}"
+        elif self._auth_provider is None:
+            # A PAT request runs as the token's role restriction, or the user's DEFAULT_ROLE.
+            who = "Your PAT's role (its role restriction, or your user's DEFAULT_ROLE if it has none)"
+        else:
+            who = "Role <ROLE> (couldn't determine your role)"
         grantee = role or "<ROLE>"
         source = ""
         if self._auth_provider is not None:
@@ -2966,7 +2995,15 @@ class CortexTrainingClient:
                 f"- If they exist: ask an admin to run `GRANT USAGE ON DATABASE {database} TO ROLE {grantee}` "
                 f"and `GRANT USAGE ON SCHEMA {database}.{schema} TO ROLE {grantee}`.",
             ]
+        if not role and self._auth_provider is None:
+            lines.insert(
+                1,
+                "- If that's the wrong role: restrict the PAT to a role that has access, or run "
+                "`ALTER USER <USER> SET DEFAULT_ROLE = <ROLE>`. Snowsight shows the token's role under "
+                "Settings > Authentication.",
+            )
         lines.append("- Or use another database: --database NAME / CORTEX_TRAINING_DATABASE.")
+        lines.append(f"Server: HTTP 400 ({_INVALID_REQUEST_CODE}): {server_message}")
         return DatabaseAccessError(
             "\n".join(lines), response=response, kind=kind, name=name, role=role, statement=statement
         )
@@ -3000,8 +3037,9 @@ class CortexTrainingClient:
     ) -> requests.Response:
         """Send one request with retries.
 
-        An HTTP 400 with code 517602 (the configured database or schema can't be
-        found) raises :class:`DatabaseAccessError`. ``explain_database=False``
+        An HTTP 400 with code 517602 whose message says the configured database
+        or schema can't be found raises :class:`DatabaseAccessError`; any other
+        517602 (the API's generic invalid-request code) stays an ``HTTPError``. ``explain_database=False``
         leaves that answer as it is, for routes whose path names no database; a
         client from :meth:`for_job` always leaves it.
         """
@@ -3134,9 +3172,9 @@ class CortexTrainingClient:
                 if (
                     explain_database
                     and status_code == 400
-                    and _response_error_code(resp) == _DATABASE_NOT_RESOLVED_CODE
+                    and (server_message := _database_not_resolved_message(resp)) is not None
                 ):
-                    raise self._database_error(resp)
+                    raise self._database_error(resp, server_message)
                 try:
                     # requests.Response.raise_for_status() intentionally ignores 3xx.
                     if 300 <= resp.status_code < 400:

@@ -8207,10 +8207,15 @@ class TestMissingDatabase:
         with pytest.raises(nc.DatabaseAccessError) as exc:
             c._send("GET", f"{c.base_url}/test")
         assert str(exc.value) == (
-            "Role <ROLE> (couldn't determine your role) can't find database MY_DB.\n"
+            "Your PAT's role (its role restriction, or your user's DEFAULT_ROLE if it has none) "
+            "can't find database MY_DB.\n"
+            "- If that's the wrong role: restrict the PAT to a role that has access, or run "
+            "`ALTER USER <USER> SET DEFAULT_ROLE = <ROLE>`. Snowsight shows the token's role under "
+            "Settings > Authentication.\n"
             "- If it doesn't exist: run `CREATE DATABASE IF NOT EXISTS MY_DB` (or ask an admin to).\n"
             "- If it exists: ask an admin to run `GRANT USAGE ON DATABASE MY_DB TO ROLE <ROLE>`.\n"
-            "- Or use another database: --database NAME / CORTEX_TRAINING_DATABASE."
+            "- Or use another database: --database NAME / CORTEX_TRAINING_DATABASE.\n"
+            "Server: HTTP 400 (517602): Schema MY_DB.SCH is not found or not authorized"
         )
         c._session.post.assert_not_called()  # no SQL, nothing created
         c._session.get.assert_called_once()  # not retried
@@ -8230,8 +8235,18 @@ class TestMissingDatabase:
         message = str(exc.value)
         assert message.startswith("Role TRAINER can't find database MY_DB (from profile prod).\n")
         assert "GRANT USAGE ON DATABASE MY_DB TO ROLE TRAINER" in message
+        assert "PAT" not in message
+        assert message.endswith("\nServer: HTTP 400 (517602): Schema MY_DB.SCH is not found or not authorized")
         assert exc.value.role == "TRAINER"
         c._session.post.assert_not_called()
+
+    def test_a_quoted_schema_name_is_explained_too(self):
+        c = self._client(profile="prod", role="TRAINER")
+        body = {"code": "517602", "message": 'Schema "my db".PUBLIC is not found or not authorized'}
+        c._session.get.return_value = _make_error_response(body, 400)
+        with pytest.raises(nc.DatabaseAccessError) as exc:
+            c._send("GET", f"{c.base_url}/test")
+        assert str(exc.value).endswith('\nServer: HTTP 400 (517602): Schema "my db".PUBLIC is not found or not authorized')
 
     def test_the_default_profile_is_named_as_such(self):
         c = self._client(profile=None, role="TRAINER")
@@ -8261,6 +8276,21 @@ class TestMissingDatabase:
             pytest.param({"code": "517604", "message": 'invalid hardware "NOT_A_GPU"'}, 400, id="other-code"),
             pytest.param({"message": "Schema MY_DB.SCH is not found or not authorized"}, 400, id="no-code"),
             pytest.param({"code": "517602", "message": "Schema MY_DB.SCH is not found or not authorized"}, 422, id="not-400"),
+            # 517602 is the generic invalid-request code, not a database answer.
+            pytest.param({"code": "517602", "message": "Unsupported model: x/y"}, 400, id="invalid-request"),
+            pytest.param({"code": "517602"}, 400, id="invalid-request-no-message"),
+            pytest.param(
+                {"code": "517602", "message": "Stage MY_DB.SCH.EXPORTS is not found or not authorized"}, 400,
+                id="stage-not-found",
+            ),
+            pytest.param(
+                {"code": "517602", "message": "Experiment MY_DB.SCH.EXP not found or not authorized"}, 400,
+                id="experiment-not-found",
+            ),
+            pytest.param(
+                {"code": "517602", "message": "CREATE EXPERIMENT privilege required on schema MY_DB.SCH"}, 400,
+                id="missing-create-experiment",
+            ),
             pytest.param({}, 404, id="missing-job"),
             pytest.param({"message": "boom"}, 500, id="server-error"),
         ],
