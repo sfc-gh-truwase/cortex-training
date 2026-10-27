@@ -413,8 +413,8 @@ class DatabaseAccessError(requests.exceptions.HTTPError, RuntimeError):
 
     Raised for the API's HTTP 400 with code 517602 and message "Schema ... is
     not found or not authorized". The client never creates a database; the
-    message says how to create it, get access, or use another, and ends with
-    the server's message.
+    message starts with the server's message, then says how to create it, get
+    access, or use another.
     ``kind`` is ``"database"`` or ``"schema"``, ``name`` the object, ``role``
     the session's role (None when it can't be determined, as for PAT clients),
     and ``statement`` the CREATE statement that would set it up.
@@ -2960,9 +2960,11 @@ class CortexTrainingClient:
     def _schema_not_found_error(self, response: requests.Response, server_message: str) -> DatabaseAccessError:
         """Explain an HTTP 400 saying the configured schema can't be found."""
         role = self._current_role()
+        sent_headers = getattr(getattr(response, "request", None), "headers", None) or self._session.headers
+        sent_pat = sent_headers.get("X-Snowflake-Authorization-Token-Type") == "PROGRAMMATIC_ACCESS_TOKEN"
         if role:
             who = f"Role {role}"
-        elif self._auth_provider is None:
+        elif sent_pat:
             who = "Your PAT's role (its role restriction, or your user's DEFAULT_ROLE if it has none)"
         else:
             who = "Role <ROLE> (couldn't determine your role)"
@@ -2975,6 +2977,7 @@ class CortexTrainingClient:
         if schema.upper() == "PUBLIC":
             kind, name, statement = "database", database, f"CREATE DATABASE IF NOT EXISTS {database}"
             lines = [
+                f"HTTP 400 ({_INVALID_REQUEST_CODE}): {server_message}",
                 f"{who} can't find database {database}{source}.",
                 f"- If it doesn't exist: run `{statement}` (or ask an admin to).",
                 f"- If it exists: ask an admin to run `GRANT USAGE ON DATABASE {database} TO ROLE {grantee}`.",
@@ -2985,20 +2988,20 @@ class CortexTrainingClient:
             create_schema = f"CREATE SCHEMA IF NOT EXISTS {database}.{schema}"
             statement = f"{create_database}; {create_schema}"
             lines = [
+                f"HTTP 400 ({_INVALID_REQUEST_CODE}): {server_message}",
                 f"{who} can't find database {database} or its schema {schema}{source}.",
                 f"- If they don't exist: run `{create_database}` and `{create_schema}` (or ask an admin to).",
                 f"- If they exist: ask an admin to run `GRANT USAGE ON DATABASE {database} TO ROLE {grantee}` "
                 f"and `GRANT USAGE ON SCHEMA {database}.{schema} TO ROLE {grantee}`.",
             ]
-        if not role and self._auth_provider is None:
+        if not role and sent_pat:
             lines.insert(
-                1,
+                2,
                 "- If that's the wrong role: restrict the PAT to a role that has access, or run "
                 "`ALTER USER <USER> SET DEFAULT_ROLE = <ROLE>`. Snowsight shows the token's role under "
                 "Settings > Authentication.",
             )
         lines.append("- Or use another database: --database NAME / CORTEX_TRAINING_DATABASE.")
-        lines.append(f"Server: HTTP 400 ({_INVALID_REQUEST_CODE}): {server_message}")
         return DatabaseAccessError(
             "\n".join(lines), response=response, kind=kind, name=name, role=role, statement=statement
         )

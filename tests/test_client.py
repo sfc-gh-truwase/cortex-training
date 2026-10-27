@@ -8188,11 +8188,13 @@ _FAILED_REQUEST = {"code": "517602", "message": "Schema MY_DB.SCH is not found o
 
 class TestMissingDatabase:
     @staticmethod
-    def _client(database="MY_DB", schema="PUBLIC", *, profile=None, role=None):
+    def _client(database="MY_DB", schema="PUBLIC", *, profile=None, role=None, pat=False):
         c = CortexTrainingClient(
             base_url="https://test.snowflakecomputing.com", database=database, schema=schema
         )
         c._session = MagicMock()
+        if pat:
+            c._session.headers = {"X-Snowflake-Authorization-Token-Type": "PROGRAMMATIC_ACCESS_TOKEN"}
         if profile is not False and (profile or role):
             c._auth_provider = MagicMock()
             c._auth_provider.get_token.return_value = "session-token"
@@ -8201,12 +8203,13 @@ class TestMissingDatabase:
         return c
 
     def test_a_pat_client_gets_a_clear_error_and_nothing_runs(self):
-        c = self._client()
+        c = self._client(pat=True)
         c.max_retries = 5
         c._session.get.return_value = _make_error_response(_FAILED_REQUEST, 400)
         with pytest.raises(nc.DatabaseAccessError) as exc:
             c._send("GET", f"{c.base_url}/test")
         assert str(exc.value) == (
+            "HTTP 400 (517602): Schema MY_DB.SCH is not found or not authorized\n"
             "Your PAT's role (its role restriction, or your user's DEFAULT_ROLE if it has none) "
             "can't find database MY_DB.\n"
             "- If that's the wrong role: restrict the PAT to a role that has access, or run "
@@ -8214,8 +8217,7 @@ class TestMissingDatabase:
             "Settings > Authentication.\n"
             "- If it doesn't exist: run `CREATE DATABASE IF NOT EXISTS MY_DB` (or ask an admin to).\n"
             "- If it exists: ask an admin to run `GRANT USAGE ON DATABASE MY_DB TO ROLE <ROLE>`.\n"
-            "- Or use another database: --database NAME / CORTEX_TRAINING_DATABASE.\n"
-            "Server: HTTP 400 (517602): Schema MY_DB.SCH is not found or not authorized"
+            "- Or use another database: --database NAME / CORTEX_TRAINING_DATABASE."
         )
         c._session.post.assert_not_called()  # no SQL, nothing created
         c._session.get.assert_called_once()  # not retried
@@ -8233,12 +8235,23 @@ class TestMissingDatabase:
         with pytest.raises(nc.DatabaseAccessError) as exc:
             c._send("GET", f"{c.base_url}/test")
         message = str(exc.value)
-        assert message.startswith("Role TRAINER can't find database MY_DB (from profile prod).\n")
+        assert message.startswith(
+            "HTTP 400 (517602): Schema MY_DB.SCH is not found or not authorized\n"
+            "Role TRAINER can't find database MY_DB (from profile prod).\n"
+        )
         assert "GRANT USAGE ON DATABASE MY_DB TO ROLE TRAINER" in message
         assert "PAT" not in message
-        assert message.endswith("\nServer: HTTP 400 (517602): Schema MY_DB.SCH is not found or not authorized")
         assert exc.value.role == "TRAINER"
         c._session.post.assert_not_called()
+
+    def test_a_client_without_a_pat_or_profile_does_not_claim_a_pat(self):
+        c = self._client()
+        c._session.get.return_value = _make_error_response(_FAILED_REQUEST, 400)
+        with pytest.raises(nc.DatabaseAccessError) as exc:
+            c._send("GET", f"{c.base_url}/test")
+        message = str(exc.value)
+        assert message.splitlines()[1] == "Role <ROLE> (couldn't determine your role) can't find database MY_DB."
+        assert "PAT" not in message
 
     def test_a_quoted_schema_name_is_explained_too(self):
         c = self._client(profile="prod", role="TRAINER")
@@ -8246,7 +8259,7 @@ class TestMissingDatabase:
         c._session.get.return_value = _make_error_response(body, 400)
         with pytest.raises(nc.DatabaseAccessError) as exc:
             c._send("GET", f"{c.base_url}/test")
-        assert str(exc.value).endswith('\nServer: HTTP 400 (517602): Schema "my db".PUBLIC is not found or not authorized')
+        assert str(exc.value).startswith('HTTP 400 (517602): Schema "my db".PUBLIC is not found or not authorized\n')
 
     def test_the_default_profile_is_named_as_such(self):
         c = self._client(profile=None, role="TRAINER")
@@ -8259,7 +8272,8 @@ class TestMissingDatabase:
         c._session.get.return_value = _make_error_response(_FAILED_REQUEST, 400)
         with pytest.raises(nc.DatabaseAccessError) as exc:
             c._send("GET", f"{c.base_url}/test")
-        assert str(exc.value).splitlines()[:3] == [
+        assert str(exc.value).splitlines()[:4] == [
+            "HTTP 400 (517602): Schema MY_DB.SCH is not found or not authorized",
             "Role TRAINER can't find database MY_DB or its schema CUSTOM (from profile prod).",
             "- If they don't exist: run `CREATE DATABASE IF NOT EXISTS MY_DB` and "
             "`CREATE SCHEMA IF NOT EXISTS MY_DB.CUSTOM` (or ask an admin to).",
