@@ -310,13 +310,10 @@ _ENDED_JOB_STATES = frozenset(
 # out the service's read-after-create window.
 _RECENTLY_CREATED_SECONDS = 120.0
 _SESSION_EXPIRED_CODES = frozenset({"390111", "390112", "390114"})
-# The Cortex Training API's generic invalid-request code. On its own it says
-# nothing about the database: only an HTTP 400 with this code whose message
-# says the URL path's DATABASE.SCHEMA can't be resolved is explained as one
-# (the API says "Schema" whether the database or the schema is missing, and
-# quotes names that need it). The client never creates a database.
+# The Cortex Training API's invalid-request code, and its message for a URL
+# path DATABASE.SCHEMA it can't resolve (missing database or schema alike).
 _INVALID_REQUEST_CODE = "517602"
-_DATABASE_NOT_RESOLVED_MESSAGE = re.compile(r"^Schema .+ is not found or not authorized$")
+_SCHEMA_NOT_FOUND_MESSAGE = re.compile(r"^Schema .+ is not found or not authorized$")
 _CHUNK_GROUP_RESTART_REQUIRED = "chunk_group_restart_required"
 _CHUNK_GROUP_ERROR_CODES = {
     _CHUNK_GROUP_RESTART_REQUIRED,
@@ -414,11 +411,10 @@ class ChunkGroupConflictError(ChunkGroupError):
 class DatabaseAccessError(requests.exceptions.HTTPError, RuntimeError):
     """The configured database or schema can't be found by the current role.
 
-    Raised for the API's HTTP 400 with code 517602 when its message says the
-    database or schema in the URL is not found or not authorized; other 517602
-    answers are plain ``HTTPError``. The client never creates a database; the
+    Raised for the API's HTTP 400 with code 517602 and message "Schema ... is
+    not found or not authorized". The client never creates a database; the
     message says how to create it, get access, or use another, and ends with
-    what the server said.
+    the server's message.
     ``kind`` is ``"database"`` or ``"schema"``, ``name`` the object, ``role``
     the session's role (None when it can't be determined, as for PAT clients),
     and ``statement`` the CREATE statement that would set it up.
@@ -655,8 +651,8 @@ def _response_error_code(response: requests.Response | None) -> str | None:
     return None
 
 
-def _database_not_resolved_message(response: requests.Response | None) -> str | None:
-    """The server's message when ``response`` says the URL's database or schema can't be resolved."""
+def _schema_not_found_message(response: requests.Response | None) -> str | None:
+    """The server's message when ``response`` says the URL's schema can't be found."""
     if response is None:
         return None
     try:
@@ -666,7 +662,7 @@ def _database_not_resolved_message(response: requests.Response | None) -> str | 
     for candidate in _iter_error_dicts(body):
         code = candidate.get("code") or candidate.get("error_code")
         message = str(candidate.get("message") or "").strip()
-        if str(code) == _INVALID_REQUEST_CODE and _DATABASE_NOT_RESOLVED_MESSAGE.match(message):
+        if str(code) == _INVALID_REQUEST_CODE and _SCHEMA_NOT_FOUND_MESSAGE.match(message):
             return message
     return None
 
@@ -2961,13 +2957,12 @@ class CortexTrainingClient:
             logger.debug("Could not read the session's role.", exc_info=True)
             return None
 
-    def _database_error(self, response: requests.Response, server_message: str) -> DatabaseAccessError:
-        """Explain an HTTP 400 saying the configured database or schema can't be found."""
+    def _schema_not_found_error(self, response: requests.Response, server_message: str) -> DatabaseAccessError:
+        """Explain an HTTP 400 saying the configured schema can't be found."""
         role = self._current_role()
         if role:
             who = f"Role {role}"
         elif self._auth_provider is None:
-            # A PAT request runs as the token's role restriction, or the user's DEFAULT_ROLE.
             who = "Your PAT's role (its role restriction, or your user's DEFAULT_ROLE if it has none)"
         else:
             who = "Role <ROLE> (couldn't determine your role)"
@@ -3037,10 +3032,10 @@ class CortexTrainingClient:
     ) -> requests.Response:
         """Send one request with retries.
 
-        An HTTP 400 with code 517602 whose message says the configured database
-        or schema can't be found raises :class:`DatabaseAccessError`; any other
-        517602 (the API's generic invalid-request code) stays an ``HTTPError``. ``explain_database=False``
-        leaves that answer as it is, for routes whose path names no database; a
+        An HTTP 400 saying the configured schema can't be found (code 517602,
+        "Schema ... is not found or not authorized") raises
+        :class:`DatabaseAccessError`. ``explain_database=False`` leaves that
+        answer as it is, for routes whose path names no database; a
         client from :meth:`for_job` always leaves it.
         """
         explain_database = explain_database and self._explain_database_errors
@@ -3172,9 +3167,9 @@ class CortexTrainingClient:
                 if (
                     explain_database
                     and status_code == 400
-                    and (server_message := _database_not_resolved_message(resp)) is not None
+                    and (server_message := _schema_not_found_message(resp)) is not None
                 ):
-                    raise self._database_error(resp, server_message)
+                    raise self._schema_not_found_error(resp, server_message)
                 try:
                     # requests.Response.raise_for_status() intentionally ignores 3xx.
                     if 300 <= resp.status_code < 400:

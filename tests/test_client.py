@@ -8276,7 +8276,6 @@ class TestMissingDatabase:
             pytest.param({"code": "517604", "message": 'invalid hardware "NOT_A_GPU"'}, 400, id="other-code"),
             pytest.param({"message": "Schema MY_DB.SCH is not found or not authorized"}, 400, id="no-code"),
             pytest.param({"code": "517602", "message": "Schema MY_DB.SCH is not found or not authorized"}, 422, id="not-400"),
-            # 517602 is the generic invalid-request code, not a database answer.
             pytest.param({"code": "517602", "message": "Unsupported model: x/y"}, 400, id="invalid-request"),
             pytest.param({"code": "517602"}, 400, id="invalid-request-no-message"),
             pytest.param(

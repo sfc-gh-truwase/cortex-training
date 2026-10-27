@@ -72,13 +72,11 @@ and read timeout, or a `(connect, read)` pair. `from_configs` also accepts
 `telemetry_timeout` (3s) for best-effort client metrics.
 
 The client never creates a database. A request that fails because the
-database or schema in its URL can't be found (HTTP 400, code `517602`, with a
-message such as `Schema DB.SCHEMA is not found or not authorized`) raises
-`DatabaseAccessError` (see [Exceptions](#exceptions)), which says how to create
-it, get access to it, or use another one, and ends with the server's message.
-`517602` itself is the API's generic invalid-request code; any other `517602`
-answer stays a plain `requests.HTTPError`. A client from `for_job` raises the
-plain `requests.HTTPError` instead. `client.auto_create_database` is deprecated:
+database or schema in its URL can't be found (HTTP 400, code `517602`, message
+`Schema DB.SCHEMA is not found or not authorized`) raises `DatabaseAccessError`
+(see [Exceptions](#exceptions)), which says how to create it, get access to it,
+or use another one, and ends with the server's message. A client from `for_job`
+raises the plain `requests.HTTPError` instead. `client.auto_create_database` is deprecated:
 it is always False. Setting it to True emits a `FutureWarning`; setting it to False
 needs no change.
 
@@ -400,9 +398,8 @@ on a failed/cancelled request and `TimeoutError` at the deadline.
 current role: it doesn't exist, or the role can't access it. It carries
 `.response` (the HTTP 400), `.kind` (`"database"` or `"schema"`), `.name`,
 `.role` (the session's role, or None when it can't be determined, as for PAT
-clients; a PAT request runs as the token's role restriction, or the user's
-`DEFAULT_ROLE` if it has none, and the message says so), and `.statement`, the
-SQL that would set it up: `CREATE DATABASE IF NOT EXISTS ...`, or for a schema other than `PUBLIC`, that statement and
+clients), and `.statement`, the SQL that would set it up: `CREATE DATABASE IF NOT
+EXISTS ...`, or for a schema other than `PUBLIC`, that statement and
 `CREATE SCHEMA IF NOT EXISTS ...`, separated by `; `.
 
 ## Details not covered here
